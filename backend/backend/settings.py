@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     "drf_spectacular",
     # Local
     "accounts",
+    "portfolio",
+    "imports",
 ]
 
 MIDDLEWARE = [
@@ -142,6 +144,24 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_CREDENTIALS = True
+
+
+# Logging — key=value messages to stdout, easy to grep and to ship to a log collector.
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "plain": {"format": "{asctime} {levelname} {name} {message}", "style": "{"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "plain"},
+    },
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "finpilot": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO"), "propagate": False},
+    },
+}
 
 
 # Internationalization
