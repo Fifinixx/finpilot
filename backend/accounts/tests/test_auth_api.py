@@ -80,4 +80,10 @@ class AuthApiTests(APITestCase):
             reverse("auth-register"), {"email": "viewer@example.com", "password": "123"}, format="json"
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("email", res.data)
+        self.assertEqual(res.data["email"], ["An account with this email already exists."])
+
+    def test_register_rejects_email_differing_only_by_case(self):
+        res = self.client.post(
+            reverse("auth-register"), {"email": "Viewer@Example.com", "password": PASSWORD}, format="json"
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
