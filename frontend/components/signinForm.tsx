@@ -1,7 +1,9 @@
+"use client"
+
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -10,8 +12,27 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useAuth } from "@/components/authProvider"
+import { ApiError } from "@/lib/api"
 
 export default function SigninForm() {
+  const { login } = useAuth()
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setPending(true)
+    setError(null)
+    try {
+      await login(String(form.get("email")), String(form.get("password")))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong.")
+      setPending(false)
+    }
+  }
+
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
@@ -20,41 +41,43 @@ export default function SigninForm() {
           Enter your email below to login to your account
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form>
+      <form onSubmit={handleSubmit}>
+        <CardContent>
           <div className="flex flex-col gap-6">
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="signin-email">Email</Label>
               <Input
-                id="email"
+                id="signin-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 placeholder="m@example.com"
                 required
               />
             </div>
             <div className="grid gap-2">
-              <div className="flex items-center">
-                <Label htmlFor="password">Password</Label>
-                <a
-                  href="#"
-                  className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
-                >
-                  Forgot your password?
-                </a>
-              </div>
-              <Input id="password" type="password" required />
+              <Label htmlFor="signin-password">Password</Label>
+              <Input
+                id="signin-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
             </div>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
           </div>
-        </form>
-      </CardContent>
-      <CardFooter className="flex-col gap-2">
-        <Button type="submit" className="w-full">
-          Login
-        </Button>
-        <Button variant="outline" className="w-full">
-          Login with Google
-        </Button>
-      </CardFooter>
+        </CardContent>
+        <CardFooter className="mt-6 flex-col gap-2">
+          <Button type="submit" className="w-full" disabled={pending}>
+            {pending ? "Logging in…" : "Login"}
+          </Button>
+        </CardFooter>
+      </form>
     </Card>
   )
 }

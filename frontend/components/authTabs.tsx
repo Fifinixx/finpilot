@@ -1,11 +1,4 @@
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Tabs,
   TabsContent,
   TabsList,
@@ -16,7 +9,7 @@ import SignupForm from "./signupForm"
 
 export default function AuthTabs() {
   return (
-    <Tabs defaultValue="overview" className="w-[400px]">
+    <Tabs defaultValue="signin" className="w-full max-w-sm">
       <TabsList>
         <TabsTrigger value="signin">Sign in</TabsTrigger>
         <TabsTrigger value="signup">Sign up</TabsTrigger>
@@ -26,34 +19,6 @@ export default function AuthTabs() {
       </TabsContent>
       <TabsContent value="signup">
         <SignupForm />
-      </TabsContent>
-      <TabsContent value="reports">
-        <Card>
-          <CardHeader>
-            <CardTitle>Reports</CardTitle>
-            <CardDescription>
-              Generate and download your detailed reports. Export data in
-              multiple formats for analysis.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            You have 5 reports ready and available to export.
-          </CardContent>
-        </Card>
-      </TabsContent>
-      <TabsContent value="settings">
-        <Card>
-          <CardHeader>
-            <CardTitle>Settings</CardTitle>
-            <CardDescription>
-              Manage your account preferences and options. Customize your
-              experience to fit your needs.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Configure notifications, security, and themes.
-          </CardContent>
-        </Card>
       </TabsContent>
     </Tabs>
   )
