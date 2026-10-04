@@ -38,7 +38,8 @@ export default function SigninForm() {
       <CardHeader>
         <CardTitle>Login to your account</CardTitle>
         <CardDescription>
-          Enter your email below to login to your account
+          Enter your email below to login to your account. Accounts are
+          created by an administrator.
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>

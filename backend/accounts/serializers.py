@@ -40,12 +40,16 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
-class RegisterSerializer(serializers.ModelSerializer):
+class UserCreateSerializer(serializers.ModelSerializer):
+    """Used by ADMINs to create accounts. There is no public sign-up."""
+
     password = serializers.CharField(write_only=True, trim_whitespace=False)
+    role = serializers.ChoiceField(choices=User.Role.choices, default=User.Role.VIEWER)
 
     class Meta:
         model = User
-        fields = ["email", "password", "first_name", "last_name"]
+        fields = ["id", "email", "password", "first_name", "last_name", "role"]
+        read_only_fields = ["id"]
         # Drop the model's case-sensitive unique check; validate_email does a
         # case-insensitive one with a friendlier message.
         extra_kwargs = {"email": {"validators": []}}
@@ -64,5 +68,4 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        # Self-registration always yields a VIEWER; ADMINs are granted explicitly.
-        return User.objects.create_user(role=User.Role.VIEWER, **validated_data)
+        return User.objects.create_user(**validated_data)

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import AuthTabs from "@/components/authTabs"
+import SigninForm from "@/components/signinForm"
 import { useAuth } from "@/components/authProvider"
 
 export default function Auth() {
@@ -15,7 +15,7 @@ export default function Auth() {
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
-      {status === "unauthenticated" && <AuthTabs />}
+      {status === "unauthenticated" && <SigninForm />}
     </main>
   )
 }

@@ -1,6 +1,6 @@
 from django.conf import settings
 from drf_spectacular.utils import extend_schema, inline_serializer
-from rest_framework import serializers, status
+from rest_framework import generics, serializers, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,7 +8,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
-from .serializers import LoginSerializer, RegisterSerializer, UserSerializer, tokens_for
+from .permissions import IsAdminRole
+from .serializers import LoginSerializer, UserCreateSerializer, UserSerializer, tokens_for
 
 COOKIE = settings.JWT_REFRESH_COOKIE
 
@@ -34,13 +35,12 @@ def _clear_refresh_cookie(response):
     response.delete_cookie(COOKIE["key"], path=COOKIE["path"], samesite=COOKIE["samesite"])
 
 
-def _auth_response(user, status_code=status.HTTP_200_OK):
+def _auth_response(user):
     """Access token goes in the body (kept in memory by the SPA);
     refresh token goes in an httpOnly cookie (invisible to JS)."""
     refresh = tokens_for(user)
     response = Response(
         {"access": str(refresh.access_token), "user": UserSerializer(user).data},
-        status=status_code,
     )
     _set_refresh_cookie(response, refresh)
     return response
@@ -57,20 +57,8 @@ class LoginView(APIView):
         return _auth_response(serializer.validated_data["user"])
 
 
-class RegisterView(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
-
-    @extend_schema(request=RegisterSerializer, responses={201: AuthResponse})
-    def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        return _auth_response(user, status.HTTP_201_CREATED)
-
-
 class RefreshView(APIView):
-    """Exchange the refresh cookie for a new access token (and rotate the cookie)."""
+    """Exchange the refresh cookie for a new access token and rotate the cookie."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -83,7 +71,7 @@ class RefreshView(APIView):
         try:
             old = RefreshToken(raw)
             user_id = old["user_id"]
-            old.blacklist()  # single-use: a replayed refresh token is rejected
+            old.blacklist()  # reused refresh token is rejected
         except TokenError:
             response = Response({"detail": "Session expired."}, status=status.HTTP_401_UNAUTHORIZED)
             _clear_refresh_cookie(response)
@@ -118,3 +106,13 @@ class MeView(APIView):
     @extend_schema(responses={200: UserSerializer})
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+class UserListCreateView(generics.ListCreateAPIView):
+    """ADMIN-only user management. Creating a user does not log anyone in."""
+
+    permission_classes = [IsAdminRole]
+    queryset = User.objects.order_by("email")
+
+    def get_serializer_class(self):
+        return UserCreateSerializer if self.request.method == "POST" else UserSerializer

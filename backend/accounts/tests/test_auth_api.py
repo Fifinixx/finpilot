@@ -65,25 +65,66 @@ class AuthApiTests(APITestCase):
         self.client.cookies[COOKIE] = refresh
         self.assertEqual(self.client.post(reverse("auth-refresh")).status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_register_creates_viewer_even_if_admin_role_requested(self):
-        res = self.client.post(
-            reverse("auth-register"),
-            {"email": "New@Example.com", "password": PASSWORD, "role": "ADMIN"},
-            format="json",
-        )
-        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(res.data["user"]["role"], "VIEWER")
-        self.assertEqual(res.data["user"]["email"], "new@example.com")
+    def test_public_registration_is_disabled(self):
+        res = self.client.post("/api/v1/auth/register", {"email": "x@example.com", "password": PASSWORD}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_register_rejects_duplicate_email_and_weak_password(self):
-        res = self.client.post(
-            reverse("auth-register"), {"email": "viewer@example.com", "password": "123"}, format="json"
-        )
+
+class AdminUserManagementTests(APITestCase):
+    URL = reverse("admin-users")
+
+    def setUp(self):
+        self.admin = User.objects.create_user(email="admin@example.com", password=PASSWORD, role=User.Role.ADMIN)
+        self.viewer = User.objects.create_user(email="viewer@example.com", password=PASSWORD)
+
+    def create(self, **data):
+        return self.client.post(self.URL, {"password": PASSWORD, **data}, format="json")
+
+    def test_anonymous_cannot_create_users(self):
+        self.assertEqual(self.create(email="new@example.com").status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_viewer_cannot_create_users(self):
+        self.client.force_authenticate(self.viewer)
+        res = self.create(email="new@example.com", role="ADMIN")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(User.objects.filter(email="new@example.com").exists())
+
+    def test_admin_creates_viewer_by_default(self):
+        self.client.force_authenticate(self.admin)
+        res = self.create(email="New@Example.com")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual((res.data["email"], res.data["role"]), ("new@example.com", "VIEWER"))
+        self.assertNotIn("password", res.data)
+        self.assertTrue(User.objects.get(email="new@example.com").check_password(PASSWORD))
+
+    def test_admin_can_create_admin(self):
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.create(email="ops@example.com", role="ADMIN").data["role"], "ADMIN")
+
+    def test_creating_a_user_does_not_issue_tokens(self):
+        self.client.force_authenticate(self.admin)
+        res = self.create(email="new@example.com")
+        self.assertNotIn("access", res.data)
+        self.assertNotIn(COOKIE, res.cookies)
+
+    def test_rejects_duplicate_email_case_insensitively(self):
+        self.client.force_authenticate(self.admin)
+        res = self.create(email="VIEWER@example.com")
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(res.data["email"], ["An account with this email already exists."])
 
-    def test_register_rejects_email_differing_only_by_case(self):
-        res = self.client.post(
-            reverse("auth-register"), {"email": "Viewer@Example.com", "password": PASSWORD}, format="json"
-        )
+    def test_rejects_weak_password_and_invalid_role(self):
+        self.client.force_authenticate(self.admin)
+        res = self.client.post(self.URL, {"email": "a@example.com", "password": "123", "role": "ROOT"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("role", res.data)
+
+    def test_admin_can_list_users(self):
+        self.client.force_authenticate(self.admin)
+        res = self.client.get(self.URL)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual([u["email"] for u in res.data], ["admin@example.com", "viewer@example.com"])
+
+    def test_viewer_cannot_list_users(self):
+        self.client.force_authenticate(self.viewer)
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_403_FORBIDDEN)
