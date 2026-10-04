@@ -1,17 +1,23 @@
-import { AlertTriangleIcon, CalendarX2Icon } from "lucide-react"
+import { AlertTriangleIcon, CalendarX2Icon, PencilIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { EmptyState } from "@/components/states"
 import { formatDate, formatMoney, formatPct, humanize } from "@/lib/format"
-import type { GoalList } from "@/lib/types"
+import type { Goal, GoalList } from "@/lib/types"
 
-export function GoalsSummary({ goals }: { goals: GoalList }) {
+export function GoalsSummary({ goals, action, onEdit }: {
+  goals: GoalList
+  action?: React.ReactNode
+  onEdit?: (goal: Goal) => void
+}) {
   const { summary, results } = goals
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle>Financial goals</CardTitle>
+        {action}
       </CardHeader>
       <CardContent className="space-y-5">
         {results.length === 0 ? (
@@ -43,6 +49,12 @@ export function GoalsSummary({ goals }: { goals: GoalList }) {
                       {g.is_overdue && <Badge variant="destructive"><CalendarX2Icon />Overdue</Badge>}
                       {g.is_overfunded && <Badge variant="outline"><AlertTriangleIcon />Over-funded</Badge>}
                       <Badge variant={g.priority === "HIGH" ? "default" : "outline"}>{humanize(g.priority)} priority</Badge>
+                      {onEdit && (
+                        <Button variant="ghost" size="xs" onClick={() => onEdit(g)} aria-label={`Edit ${g.name}`}>
+                          <PencilIcon />
+                          Edit
+                        </Button>
+                      )}
                     </span>
                   </div>
                   <Progress value={Math.min(g.funded_pct, 100)} aria-label={`${g.name} funded ${g.funded_pct}%`} />

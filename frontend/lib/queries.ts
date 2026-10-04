@@ -3,7 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch, withQuery } from "@/lib/api"
 import type {
-  CustomerDetail, CustomerListItem, GoalList, ImportBatch, ImportBatchDetail, ImportEntity,
+  CustomerDetail, CustomerListItem, Goal, GoalList, ImportBatch, ImportBatchDetail, ImportEntity,
   Paginated, Portfolio, Transaction,
 } from "@/lib/types"
 
@@ -74,5 +74,26 @@ export function useUploadImport() {
     },
     // New data affects every read view, so drop cached customer data too.
     onSettled: () => queryClient.invalidateQueries(),
+  })
+}
+
+export type GoalInput = {
+  goal_type: string
+  name: string
+  target_amount: string
+  current_funded_amount: string
+  target_date: string
+  priority: string
+}
+
+export function useSaveGoal(customerId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    // No goal ID -> create (POST); otherwise PATCH only the fields that changed.
+    mutationFn: ({ goalId, data }: { goalId?: string; data: Partial<GoalInput> }) =>
+      goalId
+        ? apiFetch<Goal>(`/goals/${goalId}`, { method: "PATCH", body: JSON.stringify(data) })
+        : apiFetch<Goal>(`/customers/${customerId}/goals`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals", customerId] }),
   })
 }

@@ -2,10 +2,8 @@
 
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { ArrowLeftIcon } from "lucide-react"
 import { AccountCards } from "@/components/dashboard/accountCards"
 import { AllocationChart } from "@/components/dashboard/allocationChart"
-import { CustomerHeader } from "@/components/dashboard/customerHeader"
 import { GoalsSummary } from "@/components/dashboard/goalsSummary"
 import { PortfolioSummary } from "@/components/dashboard/portfolioSummary"
 import { PositionsTable } from "@/components/dashboard/positionsTable"
@@ -14,7 +12,6 @@ import { RiskSummary } from "@/components/dashboard/riskSummary"
 import { EmptyState, ErrorState, LoadingRows } from "@/components/states"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ApiError } from "@/lib/api"
 import { useCustomer, useGoals, usePortfolio } from "@/lib/queries"
 
 export default function CustomerDashboardPage() {
@@ -23,28 +20,10 @@ export default function CustomerDashboardPage() {
   const portfolio = usePortfolio(id)
   const goals = useGoals(id)
 
-  if (customer.error instanceof ApiError && customer.error.status === 404) {
-    return (
-      <div className="space-y-4">
-        <BackLink />
-        <EmptyState title={`Customer ${id} not found`} description="Check the ID or search again." />
-      </div>
-    )
-  }
-
+  // Header, tabs and "not found" live in layout.tsx. Each section below loads
+  // and fails independently, so one slow query never blanks the page.
   return (
     <div className="space-y-6">
-      <BackLink />
-
-      {/* Each section loads and fails independently, so one slow query never blanks the page. */}
-      {customer.isPending ? (
-        <Skeleton className="h-14 w-96" />
-      ) : customer.isError ? (
-        <ErrorState error={customer.error} onRetry={customer.refetch} />
-      ) : (
-        <CustomerHeader customer={customer.data} />
-      )}
-
       {portfolio.isPending ? (
         <Skeleton className="h-36 w-full" />
       ) : portfolio.isError ? (
@@ -86,11 +65,17 @@ export default function CustomerDashboardPage() {
         ) : goals.isError ? (
           <ErrorState error={goals.error} onRetry={goals.refetch} />
         ) : (
-          <GoalsSummary goals={goals.data} />
+          <GoalsSummary
+            goals={goals.data}
+            action={<Link href={`/customers/${id}/goals`} className="text-sm text-muted-foreground hover:text-foreground hover:underline">Manage goals</Link>}
+          />
         )}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent activity</CardTitle>
+            <Link href={`/customers/${id}/transactions`} className="text-sm text-muted-foreground hover:text-foreground hover:underline">
+              View all
+            </Link>
           </CardHeader>
           <CardContent>
             <RecentTransactions customerId={id} />
@@ -110,10 +95,3 @@ export default function CustomerDashboardPage() {
   )
 }
 
-function BackLink() {
-  return (
-    <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" /> All customers
-    </Link>
-  )
-}
