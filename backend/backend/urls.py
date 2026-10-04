@@ -4,8 +4,9 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 api_v1 = [
     path("auth/", include("accounts.urls")),
+    path("", include("portfolio.urls")),
     path("admin/users", include("accounts.admin_urls")),
-    path("admin/imports/", include("imports.urls")),
+    path("", include("imports.urls")),
     path("schema", SpectacularAPIView.as_view(), name="schema"),
     path("docs", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 ]

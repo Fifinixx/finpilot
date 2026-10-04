@@ -136,6 +136,14 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Investment portfolio & goal monitoring API.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "AccountStatusEnum": "portfolio.models.AccountStatus",
+        "TransactionStatusEnum": "portfolio.models.TransactionStatus",
+        "ImportBatchStatusEnum": "imports.models.ImportBatch.Status",
+        # RiskBand, Goal priority and liquidity need share LOW/MEDIUM/HIGH.
+        "LowMediumHighEnum": "portfolio.models.GoalPriority",
+    },
 }
 
 
