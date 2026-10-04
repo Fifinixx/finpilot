@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from .importers import IMPORTERS
 from .models import ImportBatch, ImportRejection
 
 
@@ -7,6 +8,16 @@ class ImportRejectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImportRejection
         fields = ["row_number", "errors", "raw"]
+
+    def to_representation(self, obj):
+        data = super().to_representation(obj)
+        # jsonb doesn't preserve key order; present values in the file's column order.
+        importer = IMPORTERS.get(obj.batch.entity)
+        if importer:
+            raw = data["raw"]
+            ordered = {c: raw[c] for c in importer.columns if c in raw}
+            data["raw"] = ordered | {k: v for k, v in raw.items() if k not in ordered}
+        return data
 
 
 class ImportBatchSerializer(serializers.ModelSerializer):

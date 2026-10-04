@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminRole
+from backend.pagination import StandardPagination
 
 from .importers import IMPORTERS
 from .models import ImportBatch
@@ -74,10 +75,11 @@ class ImportUploadView(APIView):
 class ImportBatchListView(generics.ListAPIView):
     permission_classes = [IsAdminRole]
     serializer_class = ImportBatchSerializer
+    pagination_class = StandardPagination
     queryset = ImportBatch.objects.select_related("created_by")
 
 
 class ImportBatchDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAdminRole]
     serializer_class = ImportBatchDetailSerializer
-    queryset = ImportBatch.objects.select_related("created_by").prefetch_related("rejections")
+    queryset = ImportBatch.objects.select_related("created_by").prefetch_related("rejections__batch")

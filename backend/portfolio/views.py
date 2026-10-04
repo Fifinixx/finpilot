@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from . import selectors
 from .models import Customer, Goal, Transaction
-from .pagination import StandardPagination
+from backend.pagination import StandardPagination
 from .serializers import (
     CustomerDetailSerializer, CustomerListSerializer, GoalListSerializer, GoalSerializer, GoalSummarySerializer,
     PortfolioSerializer, TransactionFilterSerializer, TransactionSerializer,
