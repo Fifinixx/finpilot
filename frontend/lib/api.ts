@@ -20,6 +20,7 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public fieldErrors: FieldErrors = {},
+    public body: unknown = null,
   ) {
     super(message)
   }
@@ -34,17 +35,20 @@ let refreshInFlight: Promise<AuthResponse> | null = null
 async function toApiError(res: Response): Promise<ApiError> {
   const body = await res.json().catch(() => null)
   if (body && typeof body === "object") {
-    if (typeof body.detail === "string") return new ApiError(res.status, body.detail)
+    if (typeof body.detail === "string") return new ApiError(res.status, body.detail, {}, body)
     const { non_field_errors, ...fields } = body as FieldErrors
     const message = non_field_errors?.[0] ?? Object.values(fields)[0]?.[0] ?? "Request failed."
-    return new ApiError(res.status, message, fields)
+    return new ApiError(res.status, message, fields, body)
   }
   return new ApiError(res.status, res.status >= 500 ? "Server error. Please try again." : "Request failed.")
 }
 
 async function send<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json")
+  // FormData sets its own multipart boundary; everything else we send is JSON.
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`)
 
   let res: Response
@@ -81,6 +85,16 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     await refreshSession() // throws if the session is truly over
     return send<T>(path, init)
   }
+}
+
+/** Build a query string, skipping empty values. */
+export function withQuery(path: string, params: Record<string, string | number | undefined | null>) {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return s ? `${path}?${s}` : path
 }
 
 export async function login(email: string, password: string): Promise<User> {
