@@ -3,15 +3,16 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import selectors
+from . import selectors, services
 from .models import Customer, Goal, Transaction
 from backend.pagination import StandardPagination
 from .serializers import (
     CustomerDetailSerializer, CustomerListSerializer, GoalListSerializer, GoalSerializer, GoalSummarySerializer,
+    GoalWriteSerializer,
     PortfolioSerializer, TransactionFilterSerializer, TransactionSerializer,
 )
 
@@ -76,6 +77,30 @@ class CustomerGoalsView(APIView):
             "results": GoalSerializer(goals, many=True).data,
         })
 
+    @extend_schema(request=GoalWriteSerializer, responses={201: GoalSerializer}, summary="Create a goal")
+    def post(self, request, pk):
+        _customer_or_404(pk)
+        serializer = GoalWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        goal = services.create_goal(pk, request.user, **serializer.validated_data)
+        return Response(GoalSerializer(goal).data, status=status.HTTP_201_CREATED)
+
+
+class GoalDetailView(APIView):
+    """Any signed-in user (VIEWER or ADMIN) may maintain goals; only imports are ADMIN-only."""
+
+    @extend_schema(responses=GoalSerializer)
+    def get(self, request, goal_id):
+        return Response(GoalSerializer(get_object_or_404(Goal, pk=goal_id)).data)
+
+    @extend_schema(request=GoalWriteSerializer, responses=GoalSerializer, summary="Edit selected goal fields")
+    def patch(self, request, goal_id):
+        goal = get_object_or_404(Goal, pk=goal_id)
+        serializer = GoalWriteSerializer(goal, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        goal = services.update_goal(goal, request.user, **serializer.validated_data)
+        return Response(GoalSerializer(goal).data)
+
 
 @extend_schema(parameters=[TransactionFilterSerializer])
 class CustomerTransactionsView(generics.ListAPIView):
@@ -96,7 +121,7 @@ class CustomerTransactionsView(generics.ListAPIView):
         if "account" in f:
             qs = qs.filter(account_id=f["account"])
         if "instrument" in f:
-            qs = qs.filter(instrument_id=f["instrument"])
+            qs = qs.filter(Q(instrument__id__iexact=f["instrument"]) | Q(instrument__symbol__iexact=f["instrument"]))
         if "type" in f:
             qs = qs.filter(transaction_type=f["type"])
         if "status" in f:

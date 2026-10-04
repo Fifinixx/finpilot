@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -108,6 +110,37 @@ class GoalSerializer(serializers.ModelSerializer):
         return obj.current_funded_amount > obj.target_amount
 
 
+class GoalWriteSerializer(serializers.ModelSerializer):
+    """Create (all fields required) and partial update (PATCH) of a goal."""
+
+    name = serializers.CharField(max_length=120, trim_whitespace=True)
+    target_amount = serializers.DecimalField(
+        max_digits=18, decimal_places=2, min_value=Decimal("0.01"),
+        error_messages={"min_value": "Target amount must be greater than 0."},
+    )
+    current_funded_amount = serializers.DecimalField(
+        max_digits=18, decimal_places=2, min_value=Decimal("0"),
+        error_messages={"min_value": "Funded amount can't be negative."},
+    )
+
+    class Meta:
+        model = Goal
+        fields = ["goal_type", "name", "target_amount", "current_funded_amount", "target_date", "priority"]
+
+    def validate_name(self, value):
+        if not value:
+            raise serializers.ValidationError("Name is required.")
+        return value
+
+    def validate_target_date(self, value):
+        # Only a date being set now must be in the future, so editing other
+        # fields of an already-overdue goal still works.
+        unchanged = self.instance is not None and self.instance.target_date == value
+        if not unchanged and value <= timezone.localdate():
+            raise serializers.ValidationError("Target date must be in the future.")
+        return value
+
+
 class GoalSummarySerializer(serializers.Serializer):
     goal_count = serializers.IntegerField()
     total_target = serializers.DecimalField(max_digits=30, decimal_places=2)
@@ -143,7 +176,7 @@ class TransactionFilterSerializer(serializers.Serializer):
     date_from = serializers.DateField(required=False)
     date_to = serializers.DateField(required=False)
     account = serializers.CharField(required=False, max_length=10)
-    instrument = serializers.CharField(required=False, max_length=10)
+    instrument = serializers.CharField(required=False, max_length=20, help_text="Instrument ID or symbol")
     type = serializers.ChoiceField(choices=Transaction.Type.choices, required=False)
     status = serializers.ChoiceField(choices=Transaction.Status.choices, required=False)
     ordering = serializers.ChoiceField(choices=ORDERING, required=False, default="-trade_date")

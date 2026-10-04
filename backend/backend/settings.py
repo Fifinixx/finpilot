@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "accounts",
     "portfolio",
     "imports",
+    "core",
 ]
 
 MIDDLEWARE = [

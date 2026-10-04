@@ -148,3 +148,88 @@ class GoalsAndTransactionsApiTests(APITestCase):
         self.assertEqual(self.client.get(url, {"type": "SWAP"}).status_code, 400)
         self.assertEqual(self.client.get(url, {"date_from": "nope"}).status_code, 400)
         self.assertEqual(self.client.get(url, {"date_from": "2026-02-01", "date_to": "2026-01-01"}).status_code, 400)
+
+
+class GoalWriteApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="v@example.com", password="x")
+        self.client.force_authenticate(self.user)
+        self.customer = make_customer("C1")
+        Goal.objects.create(id="G00177", customer=self.customer, goal_type="TRAVEL", name="Trip",
+                            target_amount=1000, current_funded_amount=100, target_date=dt.date(2020, 1, 1),
+                            priority="LOW")
+        self.url = reverse("customer-goals", args=["C1"])
+        self.valid = {"goal_type": "EDUCATION", "name": "College", "target_amount": "500000",
+                      "current_funded_amount": "50000", "target_date": "2035-06-01", "priority": "HIGH"}
+
+    def test_viewer_can_create_goal_with_next_id(self):
+        res = self.client.post(self.url, self.valid, format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data["id"], "G00178")
+        self.assertEqual(res.data["funded_pct"], 10.0)
+        self.assertEqual(Goal.objects.get(pk="G00178").customer_id, "C1")
+
+    def test_ids_keep_increasing(self):
+        ids = [self.client.post(self.url, self.valid, format="json").data["id"] for _ in range(2)]
+        self.assertEqual(ids, ["G00178", "G00179"])
+
+    def test_create_validation_messages(self):
+        res = self.client.post(self.url, {**self.valid, "target_amount": "0", "current_funded_amount": "-1",
+                                          "target_date": "2020-01-01", "goal_type": "YACHT", "name": "  "},
+                               format="json")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data["target_amount"], ["Target amount must be greater than 0."])
+        self.assertEqual(res.data["current_funded_amount"], ["Funded amount can't be negative."])
+        self.assertEqual(res.data["target_date"], ["Target date must be in the future."])
+        self.assertIn("goal_type", res.data)
+        self.assertIn("name", res.data)
+
+    def test_create_for_unknown_customer_is_404(self):
+        res = self.client.post(reverse("customer-goals", args=["NOPE"]), self.valid, format="json")
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_patch_updates_only_given_fields(self):
+        url = reverse("goal-detail", args=["G00177"])
+        res = self.client.patch(url, {"current_funded_amount": "400"}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["funded_pct"], 40.0)
+        goal = Goal.objects.get(pk="G00177")
+        self.assertEqual((goal.name, goal.current_funded_amount), ("Trip", Decimal("400")))
+
+    def test_patch_keeps_existing_past_date_but_rejects_new_past_date(self):
+        url = reverse("goal-detail", args=["G00177"])
+        # Overdue goal: editing another field while re-sending its date is fine.
+        ok = self.client.patch(url, {"name": "Trip 2", "target_date": "2020-01-01"}, format="json")
+        self.assertEqual(ok.status_code, status.HTTP_200_OK)
+        bad = self.client.patch(url, {"target_date": "2021-01-01"}, format="json")
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_patch_cannot_move_goal_to_another_customer(self):
+        make_customer("C2")
+        url = reverse("goal-detail", args=["G00177"])
+        self.client.patch(url, {"customer": "C2", "id": "G99999"}, format="json")
+        goal = Goal.objects.get(pk="G00177")
+        self.assertEqual(goal.customer_id, "C1")
+
+    def test_patch_unknown_goal_is_404(self):
+        self.assertEqual(self.client.patch(reverse("goal-detail", args=["G0"]), {}, format="json").status_code, 404)
+
+    def test_requires_authentication(self):
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.post(self.url, self.valid, format="json").status_code, 401)
+
+
+class TransactionInstrumentFilterTests(APITestCase):
+    def test_instrument_filter_accepts_id_or_symbol(self):
+        self.client.force_authenticate(User.objects.create_user(email="v@example.com", password="x"))
+        c = make_customer("C1")
+        acc = Account.objects.create(id="A1", customer=c, account_type="BROKERAGE", provider="P",
+                                     opened_at=dt.date(2024, 1, 1), status="ACTIVE", base_currency="INR")
+        inst = Instrument.objects.create(id="I0001", symbol="EQ001", name="E", asset_class="EQUITY", exchange="NSE",
+                                         currency="INR", last_price=1, price_as_of=SNAP, risk_band="LOW")
+        Transaction.objects.create(id="T1", account=acc, instrument=inst, transaction_type="BUY",
+                                   trade_date=dt.date(2026, 1, 1), quantity=1, price=1, amount=1, status="SETTLED")
+        url = reverse("customer-transactions", args=["C1"])
+        for value in ("I0001", "eq001"):
+            self.assertEqual(self.client.get(url, {"instrument": value}).data["count"], 1, value)
+        self.assertEqual(self.client.get(url, {"instrument": "EQ999"}).data["count"], 0)
