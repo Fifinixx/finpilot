@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useAuth } from "@/components/authProvider"
+import { DataQuality } from "@/components/imports/dataQuality"
 import { ImportHistory } from "@/components/imports/importHistory"
 import { ImportResult } from "@/components/imports/importResult"
 import { ImportUploader } from "@/components/imports/importUploader"
@@ -42,6 +43,7 @@ export default function ImportsPage() {
           <LoadingRows rows={3} />
         ))}
       <ImportHistory selectedId={selectedId} onSelect={setSelectedId} />
+      <DataQuality />
     </div>
   )
 }

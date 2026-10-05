@@ -143,3 +143,15 @@ export type ImportBatch = {
 }
 
 export type ImportBatchDetail = ImportBatch & { rejections: ImportRejection[] }
+
+export type ReconciliationException = {
+  exception_type: string
+  entity: string
+  entity_id: string
+  customer_id: string | null
+  detail: string
+}
+
+export type DataQualityPage = Paginated<ReconciliationException> & {
+  summary: { exception_type: string; count: number }[]
+}

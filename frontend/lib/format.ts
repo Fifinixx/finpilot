@@ -21,6 +21,13 @@ const LABELS: Record<string, string> = {
   MUTUAL_FUND: "Mutual fund", GSEC: "G-Sec", ETF: "ETF", REIT: "REIT", HNI: "HNI",
   EMERGENCY_FUND: "Emergency fund", HOME_PURCHASE: "Home purchase", WEALTH_CREATION: "Wealth creation",
   RISK_PROFILES: "Risk profiles",
+  TXN_BEFORE_ACCOUNT_OPENED: "Trade before account opened",
+  TXN_ON_CLOSED_ACCOUNT: "Trade on closed account",
+  IMPORT_REJECTED_ROW: "Rejected import row",
+  IMPORT_DUPLICATES_SKIPPED: "Duplicates skipped",
+  GOAL_OVERFUNDED: "Goal over-funded",
+  GOAL_OVERDUE: "Goal overdue",
+  STALE_PRICE: "Stale price",
 }
 /** EQUITY -> "Equity", MUTUAL_FUND -> "Mutual fund". */
 export function humanize(value: string) {

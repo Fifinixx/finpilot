@@ -3,7 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch, withQuery } from "@/lib/api"
 import type {
-  CustomerDetail, CustomerListItem, Goal, GoalList, ImportBatch, ImportBatchDetail, ImportEntity,
+  CustomerDetail, CustomerListItem, DataQualityPage, Goal, GoalList, ImportBatch, ImportBatchDetail, ImportEntity,
   Paginated, Portfolio, Transaction,
 } from "@/lib/types"
 
@@ -95,5 +95,13 @@ export function useSaveGoal(customerId: string) {
         ? apiFetch<Goal>(`/goals/${goalId}`, { method: "PATCH", body: JSON.stringify(data) })
         : apiFetch<Goal>(`/customers/${customerId}/goals`, { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals", customerId] }),
+  })
+}
+
+export function useDataQuality(type: string, page: number) {
+  return useQuery({
+    queryKey: ["data-quality", type, page],
+    queryFn: () => apiFetch<DataQualityPage>(withQuery("/admin/data-quality", { type, page, page_size: 15 })),
+    placeholderData: keepPreviousData,
   })
 }
