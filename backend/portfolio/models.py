@@ -177,7 +177,8 @@ class Instrument(models.Model):
 class Holding(models.Model):
     """One end-of-day position: (account, instrument, snapshot_date) is unique."""
 
-    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="holdings")
+    # No separate FK index: the unique (account, instrument, snapshot_date) index leads with account.
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="holdings", db_index=False)
     instrument = models.ForeignKey(Instrument, on_delete=models.PROTECT, related_name="holdings")
     quantity = models.DecimalField(max_digits=20, decimal_places=6)
     avg_cost = models.DecimalField(max_digits=18, decimal_places=4)
@@ -201,7 +202,8 @@ class Transaction(models.Model):
     CASH_TYPES = (Type.DIVIDEND, Type.FEE)
 
     id = models.CharField(primary_key=True, max_length=12)
-    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="transactions")
+    # No separate FK index: txn_account_date_idx (account, -trade_date) leads with account.
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="transactions", db_index=False)
     instrument = models.ForeignKey(Instrument, on_delete=models.PROTECT, related_name="transactions")
     transaction_type = models.CharField(max_length=8, choices=Type.choices)
     trade_date = models.DateField()
@@ -267,7 +269,9 @@ class RiskProfile(models.Model):
 
     RiskLevel = RiskProfileRiskLevel
     Liquidity = RiskProfileLiquidity
-    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="risk_profiles")
+    # The unique (customer, assessed_at) index serves both FK lookups and "latest
+    # assessment" (read backwards), so no extra indexes are needed.
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="risk_profiles", db_index=False)
     risk_score = models.PositiveSmallIntegerField()
     risk_level = models.CharField(max_length=12, choices=RiskLevel.choices)
     assessed_at = models.DateField()
@@ -281,4 +285,19 @@ class RiskProfile(models.Model):
             models.CheckConstraint(condition=_in("risk_level", RiskProfileRiskLevel), name="risk_level_valid"),
             models.CheckConstraint(condition=_in("liquidity_need", RiskProfileLiquidity), name="risk_liquidity_valid"),
         ]
-        indexes = [models.Index(fields=["customer", "-assessed_at"], name="risk_customer_latest_idx")]
+
+
+class ReconciliationException(models.Model):
+    """Read-only: backed by the portfolio_reconciliation_exception SQL view (migration 0003)."""
+
+    id = models.CharField(primary_key=True, max_length=80)
+    exception_type = models.CharField(max_length=40)
+    entity = models.CharField(max_length=20)
+    entity_id = models.CharField(max_length=255)
+    customer_id = models.CharField(max_length=10, null=True)
+    detail = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = "portfolio_reconciliation_exception"
+        ordering = ["exception_type", "entity_id"]

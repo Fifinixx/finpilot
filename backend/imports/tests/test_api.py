@@ -69,3 +69,37 @@ class ImportApiTests(APITestCase):
         res = self.client.get(reverse("import-batch-detail", kwargs={"pk": batch_id}))
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res.data["rejections"]), 1)
+
+
+class DataQualityApiTests(APITestCase):
+    URL = reverse("data-quality")
+
+    def setUp(self):
+        import datetime as dt
+
+        from portfolio.models import Account, Goal, Transaction
+
+        make_reference_data()  # account A00001 opened 2024-01-01
+        acc = Account.objects.get(pk="A00001")
+        Transaction.objects.create(id="T1", account=acc, instrument_id="I0001", transaction_type="BUY",
+                                   trade_date=dt.date(2023, 6, 1), quantity=1, price=1, amount=1, status="SETTLED")
+        Goal.objects.create(id="G1", customer_id="C0001", goal_type="TRAVEL", name="Trip", target_amount=100,
+                            current_funded_amount=150, target_date=dt.date(2030, 1, 1), priority="LOW")
+        self.admin = User.objects.create_user(email="admin@example.com", password="x", role=User.Role.ADMIN)
+
+    def test_admin_sees_exceptions_from_the_sql_view(self):
+        self.client.force_authenticate(self.admin)
+        res = self.client.get(self.URL)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        summary = {row["exception_type"]: row["count"] for row in res.data["summary"]}
+        self.assertEqual(summary, {"TXN_BEFORE_ACCOUNT_OPENED": 1, "GOAL_OVERFUNDED": 1})
+        self.assertEqual(res.data["count"], 2)
+
+    def test_filter_by_type(self):
+        self.client.force_authenticate(self.admin)
+        res = self.client.get(self.URL, {"type": "GOAL_OVERFUNDED"})
+        self.assertEqual([r["entity_id"] for r in res.data["results"]], ["G1"])
+
+    def test_viewer_forbidden(self):
+        self.client.force_authenticate(User.objects.create_user(email="v@example.com", password="x"))
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_403_FORBIDDEN)

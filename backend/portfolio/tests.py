@@ -233,3 +233,27 @@ class TransactionInstrumentFilterTests(APITestCase):
         for value in ("I0001", "eq001"):
             self.assertEqual(self.client.get(url, {"instrument": value}).data["count"], 1, value)
         self.assertEqual(self.client.get(url, {"instrument": "EQ999"}).data["count"], 0)
+
+
+class ReportingViewTests(APITestCase):
+    """The SQL views must agree with the ORM-based API."""
+
+    def test_customer_aum_view_matches_portfolio_api(self):
+        from django.db import connection
+
+        PortfolioApiTests.setUp(self)
+        api = self.client.get(reverse("customer-portfolio", args=["C1"])).data["totals"]
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT market_value, unrealised_gain FROM portfolio_customer_aum WHERE customer_id = %s", ["C1"])
+            mv, gain = cursor.fetchone()
+        self.assertEqual(f"{mv:.2f}", api["market_value"])
+        self.assertEqual(f"{gain:.2f}", api["unrealised_gain"])
+
+    def test_monthly_net_flows_excludes_unsettled(self):
+        from django.db import connection
+
+        GoalsAndTransactionsApiTests.setUp(self)  # Jan 2026: BUY settled, SELL pending, BUY reversed, FEE settled
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT buy_amount, sell_amount, net_invested, fees, transaction_count "
+                           "FROM portfolio_monthly_net_flows WHERE month = '2026-01-01'")
+            self.assertEqual(cursor.fetchone(), (10, 0, 10, 10, 2))

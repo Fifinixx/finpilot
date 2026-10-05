@@ -1,4 +1,5 @@
-from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
+from django.db.models import Count
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
@@ -7,10 +8,13 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminRole
 from backend.pagination import StandardPagination
+from portfolio.models import ReconciliationException
 
 from .importers import IMPORTERS
 from .models import ImportBatch
-from .serializers import ImportBatchDetailSerializer, ImportBatchSerializer, ImportUploadSerializer
+from .serializers import (
+    ImportBatchDetailSerializer, ImportBatchSerializer, ImportUploadSerializer, ReconciliationExceptionSerializer,
+)
 from .services import DuplicateFileError, ImportFileError, run_import
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -83,3 +87,32 @@ class ImportBatchDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAdminRole]
     serializer_class = ImportBatchDetailSerializer
     queryset = ImportBatch.objects.select_related("created_by").prefetch_related("rejections__batch")
+
+
+@extend_schema(
+    summary="Data-quality / reconciliation exceptions",
+    description="Backed by the portfolio_reconciliation_exception SQL view. "
+                "The response adds `summary` (count per exception type) to the usual pagination fields.",
+    parameters=[OpenApiParameter("type", description="Filter by exception_type"), OpenApiParameter("customer")],
+)
+class DataQualityView(generics.ListAPIView):
+    permission_classes = [IsAdminRole]
+    serializer_class = ReconciliationExceptionSerializer
+    pagination_class = StandardPagination
+
+    def get_queryset(self):
+        qs = ReconciliationException.objects.all()
+        if t := self.request.query_params.get("type"):
+            qs = qs.filter(exception_type=t)
+        if c := self.request.query_params.get("customer"):
+            qs = qs.filter(customer_id=c)
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        summary = (
+            ReconciliationException.objects.values("exception_type")
+            .annotate(count=Count("id")).order_by("-count")
+        )
+        response.data = {"summary": list(summary), **response.data}
+        return response

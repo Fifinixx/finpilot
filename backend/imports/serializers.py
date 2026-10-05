@@ -38,3 +38,11 @@ class ImportBatchDetailSerializer(ImportBatchSerializer):
 
 class ImportUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
+
+
+class ReconciliationExceptionSerializer(serializers.Serializer):
+    exception_type = serializers.CharField()
+    entity = serializers.CharField()
+    entity_id = serializers.CharField()
+    customer_id = serializers.CharField(allow_null=True)
+    detail = serializers.CharField()
