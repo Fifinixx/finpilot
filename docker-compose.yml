@@ -1,0 +1,57 @@
+# Local stack: PostgreSQL + Django API + Next.js frontend.
+#   cp .env.example .env    # then set SECRET_KEY
+#   docker compose up --build
+# Frontend http://localhost:3000 · API http://localhost:8000/api/v1 · Docs http://localhost:8000/api/v1/docs
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: finpilot
+      POSTGRES_USER: finpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      # Published on localhost only, for psql or a native API run. Change it if 5432 is taken.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finpilot -d finpilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: postgres://finpilot:${POSTGRES_PASSWORD}@db:5432/finpilot
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      # Plain HTTP on localhost: the refresh cookie can't be `Secure` without TLS.
+      JWT_COOKIE_SECURE: "False"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SEED_ON_START: ${SEED_ON_START:-true}
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Called from the browser, so this is the host-facing URL, not the service name.
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:

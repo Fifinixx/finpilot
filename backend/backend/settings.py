@@ -124,11 +124,13 @@ SIMPLE_JWT = {
 }
 
 # Refresh token is delivered as an httpOnly cookie (never readable by JS).
+# `Secure` defaults to on outside DEBUG; override with JWT_COOKIE_SECURE=False
+# only for a plain-HTTP local stack (e.g. Docker Compose without TLS).
 JWT_REFRESH_COOKIE = {
     "key": "finpilot_refresh",
     "path": "/api/v1/auth/",
     "httponly": True,
-    "secure": not DEBUG,
+    "secure": env.bool("JWT_COOKIE_SECURE", default=not DEBUG),
     "samesite": "Lax",
 }
 
