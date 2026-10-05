@@ -29,27 +29,64 @@ finpilot/
 │   └── backend/        Settings, URLs, pagination
 ├── frontend/           Next.js app (dashboard, goals, transactions, admin imports)
 ├── data/               Seed CSVs and data dictionary
+├── docker-compose.yml  Local stack: db + api + web
 └── docs/
     ├── database.md     Schema, views, indexes, query plans, ops notes
+    ├── docker-walkthrough.md  How the Docker Compose stack works
     └── sql/            Standalone reporting SQL queries
 ```
 
 ## Getting started
 
-### Prerequisites
+There are two ways to run FinPilot locally. Docker Compose is the quickest because it needs only Docker installed.
 
-- Python 3.12+
-- Node.js 20+
-- PostgreSQL 15+ (local or hosted, for example Neon)
+### Option A: Docker Compose (recommended)
 
-### 1. Database
+Prerequisite: Docker Desktop, or Docker Engine with the Compose plugin.
+
+```bash
+cp .env.example .env                # then set SECRET_KEY and POSTGRES_PASSWORD
+docker compose up --build
+```
+
+This starts three containers:
+
+| Service | What it runs                                  | URL                                |
+|---------|-----------------------------------------------|------------------------------------|
+| `db`    | PostgreSQL 17, data kept in the `pgdata` volume | `localhost:5432`                 |
+| `api`   | Django API on gunicorn                        | http://localhost:8000/api/v1       |
+| `web`   | Next.js production build                      | http://localhost:3000              |
+
+On every start the API container applies migrations, creates the demo users, and imports `data/*.csv`. Files that were already imported are skipped, so restarts are safe. The frontend waits until the API health check passes. If a migration fails, the API container exits before serving any requests, and the database is left unchanged.
+
+Useful commands:
+
+```bash
+docker compose logs -f api                              # API and import logs
+docker compose exec api python manage.py test           # backend tests
+docker compose exec db psql -U finpilot finpilot        # SQL shell
+docker compose down                                     # stop (keeps data)
+docker compose down -v                                  # stop and delete the database volume
+```
+
+To skip seeding on start-up, set `SEED_ON_START=false` in `.env`.
+
+### Option B: Run each part natively
+
+Prerequisites: Python 3.12+, Node.js 20+, PostgreSQL 15+.
+
+#### 1. Database
+
+Use a local PostgreSQL install:
 
 ```bash
 createuser finpilot --pwprompt      # password: finpilot (or your own)
 createdb finpilot --owner finpilot
 ```
 
-### 2. Backend
+Or start only the database container with `docker compose up db`.
+
+#### 2. Backend
 
 ```bash
 cd backend
@@ -65,7 +102,7 @@ python manage.py runserver          # http://localhost:8000
 
 To generate a secret key, run `python -c "import secrets; print(secrets.token_urlsafe(50))"`.
 
-### 3. Frontend
+#### 3. Frontend
 
 ```bash
 cd frontend
@@ -73,6 +110,10 @@ npm install
 cp .env.example .env.local          # NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 npm run dev                         # http://localhost:3000
 ```
+
+### Hosted PostgreSQL (optional)
+
+The backend reads its database only from `DATABASE_URL`, so a managed database such as Neon works without code changes. Point `DATABASE_URL` at it, and include `?sslmode=require`. FinPilot was developed against Neon. The supported reviewer setup is the local PostgreSQL described above.
 
 ### Demo accounts
 
@@ -85,7 +126,7 @@ Use `python manage.py seed_demo_users --password <pw>` to set a different passwo
 
 ## Configuration
 
-Backend settings come from environment variables, or from `backend/.env`:
+Backend settings come from environment variables, or from `backend/.env`. Docker Compose sets them from the root `.env` instead (see `.env.example`):
 
 | Variable               | Description                              | Default / example                                   |
 |------------------------|------------------------------------------|-----------------------------------------------------|
@@ -96,6 +137,7 @@ Backend settings come from environment variables, or from `backend/.env`:
 | `CORS_ALLOWED_ORIGINS` | Frontend origin(s)                       | `http://localhost:3000`                             |
 | `JWT_ACCESS_MINUTES`   | Access-token lifetime                    | `15`                                                |
 | `JWT_REFRESH_DAYS`     | Refresh-token lifetime                   | `7`                                                 |
+| `JWT_COOKIE_SECURE`    | Mark the refresh cookie `Secure`. Docker Compose sets it to false, because it serves plain HTTP. | `not DEBUG`                    |
 | `LOG_LEVEL`            | Logging level                            | `INFO`                                              |
 
 The frontend uses only `NEXT_PUBLIC_API_URL`. This value is built into the browser bundle, so never put secrets in it.
@@ -108,6 +150,8 @@ python manage.py import_data --dir /path/to/csvs      # a different folder
 python manage.py import_data --only customers goals   # selected entities only
 python manage.py import_data --show-rejections        # print every rejected row
 ```
+
+With Docker Compose, prefix these commands with `docker compose exec api`. Inside the container the CSVs are mounted at `/data`.
 
 You can re-run the import safely: a file that was already imported is skipped. Admins can also upload CSVs from **Admin → Imports** in the UI, where they can see import history, rejected rows and the data-quality report.
 
@@ -138,6 +182,8 @@ The schema is created only by Django migrations. Reporting views are added in `p
 
 ```bash
 psql "$DATABASE_URL" -f docs/sql/assignment_queries.sql
+# or, with Docker Compose:
+docker compose exec -T db psql -U finpilot finpilot < docs/sql/assignment_queries.sql
 ```
 
 [`docs/database.md`](docs/database.md) explains the schema, constraints, indexes, query plans, and how to run the database in production.

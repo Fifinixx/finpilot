@@ -63,7 +63,11 @@ lookups are exact, so these are unused. Left in place to avoid fighting the fram
 serve. At 120 rows a sequential scan is instant; at scale add
 `CREATE EXTENSION pg_trgm` + a GIN trigram index on `full_name`, `email`.
 
-## 4. Query plans (`EXPLAIN (ANALYZE, BUFFERS)`, Neon, seed data)
+## 4. Query plans (`EXPLAIN (ANALYZE, BUFFERS)`, seed data)
+
+These plans were captured on Neon during development. The local
+Docker database should give the same plan shapes, although the timings will differ. To
+reproduce them, run the `EXPLAIN` section of `docs/sql/assignment_queries.sql`.
 
 ### Paginated transaction list for one account
 ```sql
@@ -120,7 +124,8 @@ GroupAggregate  (actual time=0.130..0.134 rows=3)   Buffers: shared hit=29
 - Size: total connections = gunicorn workers × instances; keep it well below
   `max_connections` and let the pooler multiplex.
 - Run **migrations over a direct (non-pooled) connection**: DDL and advisory locks
-  don't mix well with transaction pooling. Locally we use the direct host for this reason.
+  don't mix well with transaction pooling. The local Docker stack has no pooler, so
+  this applies only to hosted setups such as Neon, where you should use the direct (non-`-pooler`) host.
 
 ### Backups and restore
 - Managed PostgreSQL (Neon/RDS/Cloud SQL): enable automated backups with
@@ -130,7 +135,11 @@ GroupAggregate  (actual time=0.130..0.134 rows=3)   Buffers: shared hit=29
   `python manage.py migrate --check` plus the SQL task file as a smoke test.
 
 ### Migrations and rollback
-- Apply: `python manage.py migrate` (to be run by the container entrypoint before the app starts, once Docker Compose is added).
+- Apply: `python manage.py migrate`. With Docker Compose, `backend/docker-entrypoint.sh`
+  runs this on every start, before gunicorn starts. The script uses `set -e`, so if a
+  migration fails the container exits without serving traffic. The frontend
+  (`depends_on: service_healthy`) also stays down. Fix the migration and run
+  `docker compose up` again.
 - Check without applying: `python manage.py migrate --check` / `showmigrations` / `sqlmigrate <app> <n>`.
 - Each migration runs in a transaction on PostgreSQL, so **a failing migration
   rolls back automatically** and leaves the schema as it was.
@@ -142,14 +151,17 @@ GroupAggregate  (actual time=0.130..0.134 rows=3)   Buffers: shared hit=29
 - Take a backup (or a Neon branch) before applying migrations in production.
 
 ### Credentials
-- Never in Git: `DATABASE_URL` and `SECRET_KEY` come from the environment
-  (`.env` locally, git-ignored; `.env.example` has placeholders only).
+- Never in Git: `DATABASE_URL`, `SECRET_KEY` and `POSTGRES_PASSWORD` come from the environment
+  (the root `.env` for Docker Compose and `backend/.env` for a native run; both are git-ignored,
+  and the `.env.example` files contain placeholders only).
 - Production: inject from a secrets manager (AWS Secrets Manager, GCP Secret
   Manager, Doppler…) as environment variables at runtime; rotate on staff changes.
 - **Least privilege:** the app role needs `SELECT/INSERT/UPDATE/DELETE` on app
   tables only. A separate migration role owns the schema and is used only by
   the deploy step. Read-only role for BI/analysts querying the views.
-- Require TLS to the database (`sslmode=require`, already in the Neon URL).
+- Require TLS to hosted databases (`sslmode=require` in `DATABASE_URL`, as Neon provides).
+  The local Compose database is reachable only through the Docker network and the
+  published localhost port, so it runs without TLS.
 
 ## 6. Observations about the supplied data
 
